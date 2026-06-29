@@ -140,7 +140,14 @@ pub const osc52_clipboard_request = "\x1b]52;c;?\x1b\\";
 // Kitty graphics
 pub const kitty_graphics_clear = "\x1b_Ga=d\x1b\\";
 pub const kitty_graphics_preamble = "\x1b_Ga=p,i={d}";
-pub const kitty_graphics_closing = ",C=1\x1b\\";
+// q=2 makes the terminal suppress both the success (`_Gi=N;OK`) and error
+// responses to this placement. Image cells are exempt from the render diff, so
+// the placement is re-emitted every frame; without q=2 the terminal acks each
+// one. vaxis routes every `_G` response through its capability-detection event
+// and no-ops them after startup, so they are harmless in-session — but the ack
+// still in flight when an app abandons the reader thread and exits lands on the
+// shell prompt, the worse the higher the link latency (tmux, SSH).
+pub const kitty_graphics_closing = ",C=1,q=2\x1b\\";
 
 // Color control sequences
 pub const osc4_query = "\x1b]4;{d};?\x1b\\"; // color index {d}

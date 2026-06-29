@@ -1003,9 +1003,17 @@ pub fn transmitPreEncodedImage(
         .png => 100,
     };
 
+    // q=2: suppress the terminal's `_Gi=N;OK` ack for this transmit. vaxis routes
+    // every `_G` APC response through the same capability-detection event (no-op
+    // after the first), and the reader thread consumes them during the session —
+    // so they are harmless except the one still in flight when an app abandons the
+    // reader and exits (e.g. mid-upload), which then lands on the shell prompt.
+    // q=2 stops the terminal emitting it at all. For a chunked transfer the Kitty
+    // protocol carries the control data (q included) on the first chunk only; it
+    // governs the whole transmission.
     if (bytes.len < 4096) {
         try tty.print(
-            "\x1b_Gf={d},s={d},v={d},i={d};{s}\x1b\\",
+            "\x1b_Gf={d},s={d},v={d},i={d},q=2;{s}\x1b\\",
             .{
                 fmt,
                 width,
@@ -1018,7 +1026,7 @@ pub fn transmitPreEncodedImage(
         var n: usize = 4096;
 
         try tty.print(
-            "\x1b_Gf={d},s={d},v={d},i={d},m=1;{s}\x1b\\",
+            "\x1b_Gf={d},s={d},v={d},i={d},q=2,m=1;{s}\x1b\\",
             .{ fmt, width, height, id, bytes[0..n] },
         );
         while (n < bytes.len) : (n += 4096) {
@@ -1097,7 +1105,8 @@ pub fn loadImage(
 
 /// deletes an image from the terminal's memory
 pub fn freeImage(_: Vaxis, tty: *std.Io.Writer, id: u32) void {
-    tty.print("\x1b_Ga=d,d=I,i={d};\x1b\\", .{id}) catch |err| {
+    // q=2: suppress the delete ack — unread here, and would leak on a racing exit.
+    tty.print("\x1b_Ga=d,d=I,i={d},q=2;\x1b\\", .{id}) catch |err| {
         log.err("couldn't delete image {d}: {}", .{ id, err });
         return;
     };
